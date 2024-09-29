@@ -1,6 +1,7 @@
 from collections import deque
 import heapq
 import math
+from tqdm import tqdm
 
 ####################### PLOTS #######################
 # Define the class for creating the grid and plotting the elements
@@ -127,6 +128,7 @@ class PriorityQueue:
 MAZE_ROWS = 16
 MAZE_COLUMNS = 24
 ACTIONS = {"UP", "LEFT", "RIGHT", "DOWN"}
+# print(ACTIONS)
 # ACTIONS = {"RIGHT", "LEFT", "UP", "DOWN"}
 xya = {
     "UP": [1, 0],
@@ -412,17 +414,28 @@ class GridPlotterWithAnimation(GridPlotter):
 
             return ax.patches
 
+        progress_bar = tqdm(total=len(path_series))
+
+        def update_with_tqdm(step):
+            progress_bar.update(1)
+            update(step)
+
         # Create animation
         ani = animation.FuncAnimation(
-            fig, update, frames=len(path_series), init_func=init, repeat=False
+            fig,
+            update_with_tqdm,
+            frames=len(path_series),
+            init_func=init,
+            repeat=False,
         )
 
         # Save animation as a video
         print(f"Saving to {output_video}")
         FFMpegWriter = animation.writers["ffmpeg"]
-        writer = FFMpegWriter(fps=112)  # 1 frame per second for each path step
+        writer = FFMpegWriter(fps=12)  # 1 frame per second for each path step
         ani.save(output_video, writer=writer)
         print(f"Saved to {output_video}")
+        progress_bar.close()
 
         plt.close()
 
@@ -522,7 +535,7 @@ class GridPlotterWithMultiprocessing(GridPlotter):
         """Process paths using multiprocessing and save images."""
         # Use multiprocessing pool with number of workers equal to the number of CPU cores
         print(f"\nProcessing batch...{self.total_frames + len(self.current_batch)}")
-        with Pool(cpu_count()) as pool:
+        with Pool(cpu_count() - 2) as pool:
             # Distribute the work across processes
             pool.starmap(
                 self.save_frame,
@@ -546,18 +559,12 @@ class GridPlotterWithMultiprocessing(GridPlotter):
     def create_video(self, output_video="pathfinding.mp4"):
         """Create a video from the saved frames."""
         self.finish_processing()
-        # images = [
-        #     Image.open(os.path.join(self.save_dir, f"{i}.png"))
-        #     for i in range(1, self.total_frames + 1)
-        # ]
-
-        # Use moviepy or other tools here to save video
         clip = ImageSequenceClip(
             [
                 os.path.join(self.save_dir, f"{i}.png")
                 for i in range(1, self.total_frames + 1)
             ],
-            fps=12,
+            fps=24,
         )
         clip.write_videofile(output_video, codec="libx264")
 
@@ -743,15 +750,16 @@ def record_node_save(node):
     global idx
     idx += 1
     print(f"{idx}", end="\r")
-    p = path_states(node)
-    for i in range(len(p)):
-        plotter.process_path(p[: i + 1])
-    # plotter.process_path(path_states(node))
+    # p = path_states(node)
+    # for i in range(len(p)):
+    #     plotter.process_path(p[: i + 1])
+    plotter.process_path(path_states(node))
 
 
 # DFS = False
 DFS = True
 SIZE = 10
+IDX_SIZE = 5000
 num = 0
 ########### DFS
 if DFS:
@@ -774,25 +782,21 @@ if DFS:
         "Search deepest nodes in the search tree first."
         frontier = LIFOQueue([Node(problem.initial)])
         result = failure
+        # print(f"Actions {problem.actions(problem.initial)}")
         while frontier:
             node = frontier.pop()
-            record_node_save(node)
             if problem.is_goal(node.state):
-                num += 1
                 record_node_save(node)
                 print(f"\nNum: {num}")
-                if num >= SIZE:
-                    return node
-                # return node
+                return node
             elif not is_cycle(node):
-                p = path_states(node)
-                if len(p) > 13:
-                    continue
+                record_node_save(node)
                 idx += 1
                 print(f"{idx}\tnode: {node}", end="\r")
                 for child in expand(problem, node):
                     frontier.append(child)
-                # record_node(node)
+            if idx >= IDX_SIZE:
+                return node
         return result
 
     m = Maze(initial=(8, 10), goal=(11, 9))
